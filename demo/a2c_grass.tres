@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://cav200xludcnr"]
+
+[ext_resource type="Shader" uid="uid://b32nn55vqttf" path="res://addons/mobile_optimized_grass/mobile_optimized_grass.gdshader" id="1_jymdx"]
+[ext_resource type="Texture2D" uid="uid://ddq0eyo0i7yoj" path="res://demo/textures/free grass.png" id="2_m1fc1"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_jymdx")
+shader_parameter/grass_texture = ExtResource("2_m1fc1")
+shader_parameter/alpha_scissor_threshold = 0.5
+shader_parameter/alpha_antialiasing_edge = 0.4
+shader_parameter/min_height = -1.68716e-08
+shader_parameter/max_height = 0.421616
+shader_parameter/blend_factor = 0.6

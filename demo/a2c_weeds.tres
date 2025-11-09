@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://pnhojuulhoxk"]
+
+[ext_resource type="Shader" uid="uid://b32nn55vqttf" path="res://addons/mobile_optimized_grass/mobile_optimized_grass.gdshader" id="1_aqv80"]
+[ext_resource type="Texture2D" uid="uid://dxng6tiwd0o03" path="res://demo/textures/Unkraut.png" id="2_qircm"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_aqv80")
+shader_parameter/grass_texture = ExtResource("2_qircm")
+shader_parameter/alpha_scissor_threshold = 0.8
+shader_parameter/alpha_antialiasing_edge = 0.15
+shader_parameter/min_height = 8.35515e-06
+shader_parameter/max_height = 0.0295866
+shader_parameter/blend_factor = 0.0

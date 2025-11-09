@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://b44j8h2lwqv"]
+
+[ext_resource type="Shader" uid="uid://b32nn55vqttf" path="res://addons/mobile_optimized_grass/mobile_optimized_grass.gdshader" id="1_4d3w4"]
+[ext_resource type="Texture2D" uid="uid://dye2i8qio0ra3" path="res://large_demo/textures/BR.tall_grass.png" id="2_go86m"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_4d3w4")
+shader_parameter/grass_texture = ExtResource("2_go86m")
+shader_parameter/alpha_scissor_threshold = 0.25
+shader_parameter/alpha_antialiasing_edge = 0.15
+shader_parameter/min_height = -5.96046e-08
+shader_parameter/max_height = 0.516241
+shader_parameter/blend_factor = 0.6

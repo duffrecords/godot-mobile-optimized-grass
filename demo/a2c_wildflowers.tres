@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://b14mq0et4tbwi"]
+
+[ext_resource type="Shader" uid="uid://b32nn55vqttf" path="res://addons/mobile_optimized_grass/mobile_optimized_grass.gdshader" id="1_o1l72"]
+[ext_resource type="Texture2D" uid="uid://dayw1iy10hlir" path="res://demo/textures/Wild White Flower Patch_Bake1_PBR_Diffuse.png" id="2_csayb"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_o1l72")
+shader_parameter/grass_texture = ExtResource("2_csayb")
+shader_parameter/alpha_scissor_threshold = 0.25
+shader_parameter/alpha_antialiasing_edge = 0.15
+shader_parameter/min_height = -0.00114583
+shader_parameter/max_height = 0.209303
+shader_parameter/blend_factor = 0.0

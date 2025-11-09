@@ -1,0 +1,11 @@
+[gd_resource type="StandardMaterial3D" load_steps=2 format=3 uid="uid://dlptvhdf36eb5"]
+
+[ext_resource type="Texture2D" uid="uid://dtm2dd7ywbn81" path="res://large_demo/textures/ground_Bake1_CyclesBake_COMBINED.png" id="1_q2lrn"]
+
+[resource]
+resource_name = "ground_Baked"
+shading_mode = 0
+disable_ambient_light = true
+disable_fog = true
+albedo_texture = ExtResource("1_q2lrn")
+disable_receive_shadows = true

@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3 uid="uid://bpuhaoy0yix4y"]
+
+[ext_resource type="Script" uid="uid://o5ocy4u0nhxq" path="res://addons/mobile_optimized_grass/grass_instancer.gd" id="1_j38mp"]
+
+[node name="MobileOptimizedGrass" type="Node3D"]
+script = ExtResource("1_j38mp")
+type_meshes = Array[Mesh]([])
+
+[node name="MultiMeshInstance3DR" type="MultiMeshInstance3D" parent="."]
+cast_shadow = 0
+
+[node name="MultiMeshInstance3DG" type="MultiMeshInstance3D" parent="."]
+cast_shadow = 0
+
+[node name="MultiMeshInstance3DB" type="MultiMeshInstance3D" parent="."]
+cast_shadow = 0
+
+[node name="MultiMeshInstance3DA" type="MultiMeshInstance3D" parent="."]
+cast_shadow = 0
