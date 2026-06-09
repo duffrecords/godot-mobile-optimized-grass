@@ -1,36 +1,124 @@
 @tool
+class_name GrassInstancer
 extends Node3D
 
-@export var terrain_mesh_instance: MeshInstance3D
-# @export var terrain_mesh: Mesh
-@export var type_nodes: Array[MultiMeshInstance3D] # length 4
-@export var type_meshes: Array[Mesh]              # length 4
-# @export var save_path
+## Terrain mesh whose vertex colors define scatter density and shadow tint.
+@export var terrain_mesh_instance: MeshInstance3D:
+	set(value):
+		terrain_mesh_instance = value
+		update_configuration_warnings()
+## Four MultiMeshInstance3D children — one per plant type (R, G, B, A channels).
+@export var type_nodes: Array[MultiMeshInstance3D]
+## Four grass meshes — one per plant type (R, G, B, A channels).
+@export var type_meshes: Array[Mesh]:
+	set(value):
+		type_meshes = value
+		update_configuration_warnings()
+## Optional per-type GrassTypeConfig resources for per-channel shader overrides.
+@export var type_configs: Array[GrassTypeConfig]
+## Total instances to scatter across all four channels combined.
 @export var total_instances := 5000
+## Power curve applied to density weights — higher values concentrate instances on the most-painted areas.
 @export var normalize_power := 3.0
-#@export var grass_instance_mesh: Mesh
-#@export var instance0_mesh: Mesh
-#@export var instance1_mesh: Mesh
-#@export var instance2_mesh: Mesh
-#@export var instance3_mesh: Mesh
-# @export var target_mesh: MeshInstance3D
-#@export var multimesh_instance: MultiMeshInstance3D
-#@export var multimesh_instance0: MultiMeshInstance3D
-#@export var multimesh_instance1: MultiMeshInstance3D
-#@export var multimesh_instance2: MultiMeshInstance3D
-#@export var multimesh_instance3: MultiMeshInstance3D
-#@export var instance_count: int = 1000
+## Minimum random per-instance scale multiplier.
 @export var scale_min: float = 0.5
+## Maximum random per-instance scale multiplier.
 @export var scale_max: float = 1.0
-@export_range(0.0, 1.0) var blend_factor: float = 0.5 # vertical gradient factor when blending with target mesh
-@export_range(0.0, 1.0) var vertex_color_influence: float = 1.0 # scatter randomly vs. prefer to instance on vertex colors
+## Scatter algorithm: 0 = Stratified grid-jitter, 1 = Poisson Disk blue-noise. Controlled by the dock.
+@export var scatter_mode: int = 0
+## Minimum distance between instances in Poisson Disk scatter mode.
+@export var min_spacing: float = 0.5
+## Vertical gradient blend factor for the grass shader (0 = no blend, 1 = full gradient).
+@export_range(0.0, 1.0) var blend_factor: float = 0.5
+## How strongly vertex density channels bias instance placement (0 = uniform random, 1 = density-only).
+@export_range(0.0, 1.0) var vertex_color_influence: float = 1.0
+## Check to immediately re-scatter instances in the editor.
 @export var regenerate := false
-@export var baked_file_path: String = "res://grass_instances.res"
+## Path to the binary file used for baking and loading instances at runtime.
+@export var baked_file_path: String = "res://grass_instances.bin"
 
 # This button appears in inspector
 var _bake_instances_button: bool = false
 
-var _last_params = {}
+var _pre_save_buffers: Array
+
+const _GRASS_SHADER_PATH := "res://addons/mobile_optimized_grass/mobile_optimized_grass.gdshader"
+
+
+func _extract_albedo_texture(mat: Material) -> Texture2D:
+	if mat is StandardMaterial3D or mat is ORMMaterial3D:
+		return mat.albedo_texture
+	if mat is ShaderMaterial:
+		return mat.get_shader_parameter("grass_texture")
+	return null
+
+
+func _ensure_grass_material(mmi: MultiMeshInstance3D, mesh: Mesh, config: GrassTypeConfig = null) -> void:
+	var bounds: Vector2
+	if config and config.override_height_bounds:
+		bounds = Vector2(config.min_height, config.max_height)
+	else:
+		bounds = get_mesh_y_bounds(mesh)
+	var threshold := config.alpha_scissor_threshold if config else 0.5
+	var aa_edge := config.alpha_antialiasing_edge if config else 0.4
+	var bf := config.blend_factor if (config and config.override_blend_factor) else blend_factor
+
+	var existing: Material = mmi.material_override
+	if existing is ShaderMaterial:
+		var sm: ShaderMaterial = existing
+		if sm.shader and sm.shader.resource_path == _GRASS_SHADER_PATH:
+			sm.set_shader_parameter("min_height", bounds.x)
+			sm.set_shader_parameter("max_height", bounds.y)
+			sm.set_shader_parameter("blend_factor", bf)
+			sm.set_shader_parameter("alpha_scissor_threshold", threshold)
+			sm.set_shader_parameter("alpha_antialiasing_edge", aa_edge)
+			return
+	var albedo_tex := _extract_albedo_texture(mesh.surface_get_material(0))
+	var shader := load(_GRASS_SHADER_PATH) as Shader
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	if albedo_tex:
+		mat.set_shader_parameter("grass_texture", albedo_tex)
+	mat.set_shader_parameter("alpha_scissor_threshold", threshold)
+	mat.set_shader_parameter("alpha_antialiasing_edge", aa_edge)
+	mat.set_shader_parameter("min_height", bounds.x)
+	mat.set_shader_parameter("max_height", bounds.y)
+	mat.set_shader_parameter("blend_factor", bf)
+	mmi.material_override = mat
+
+
+func _enter_tree() -> void:
+	if not Engine.is_editor_hint():
+		return
+	var root = get_tree().edited_scene_root
+	if root == null:
+		return
+	var changed := false
+	while type_nodes.size() < 4:
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "GrassType%d" % type_nodes.size()
+		add_child(mmi)
+		mmi.owner = root
+		type_nodes.append(mmi)
+		changed = true
+	while type_meshes.size() < 4:
+		type_meshes.append(null)
+		changed = true
+	if changed:
+		notify_property_list_changed()
+
+
+func _get_configuration_warnings() -> PackedStringArray:
+	var w := PackedStringArray()
+	if not terrain_mesh_instance:
+		w.append("terrain_mesh_instance must be assigned before scattering.")
+	var missing_meshes := 0
+	for i in 4:
+		if i >= type_meshes.size() or type_meshes[i] == null:
+			missing_meshes += 1
+	if missing_meshes > 0:
+		w.append("%d of 4 type_meshes not assigned — those channels will be skipped." % missing_meshes)
+	return w
 
 
 func _get_property_list() -> Array:
@@ -57,25 +145,12 @@ func _set(property: StringName, value) -> bool:
 		return true
 	return false
 
-func _on_bake_instances_button_pressed(value):
-	if value:
-		bake_instances_to_file(baked_file_path)
-		# reset button state so you can press again
-		_bake_instances_button = false
-		# notify property changed to update inspector UI
-		notify_property_list_changed()
-
 func bake_instances_to_file(path: String):
-#	if type_nodes.size() == 0:
-#	#if not multimesh_instance or not multimesh_instance.multimesh:
-#		push_error("No MultiMeshInstance or MultiMesh assigned!")
-#		return
 	var data = []
 	var total_baked_instances = 0
 	for mmi in type_nodes.size():
 		var mm_data = []
 		var mm = type_nodes[mmi].multimesh
-		# var instance_count = mm.instance_count
 		for i in mm.instance_count:
 			var xform = mm.get_instance_transform(i)
 			var color = mm.get_instance_color(i)
@@ -104,31 +179,40 @@ func load_baked_instances(path: String) -> Array:
 	file.close()
 	return data
 
-func step(edge, x):
-	return 0 if x < edge else 1
+func _notification(what: int) -> void:
+	if not Engine.is_editor_hint():
+		return
+	if what == NOTIFICATION_EDITOR_PRE_SAVE:
+		_pre_save_buffers.clear()
+		for mmi in type_nodes:
+			if mmi and mmi.multimesh and mmi.multimesh.instance_count > 0:
+				_pre_save_buffers.append(mmi.multimesh.get_buffer())
+				mmi.multimesh.instance_count = 0
+			else:
+				_pre_save_buffers.append(null)
+	elif what == NOTIFICATION_EDITOR_POST_SAVE:
+		for i in mini(type_nodes.size(), _pre_save_buffers.size()):
+			var buf = _pre_save_buffers[i]
+			if buf == null:
+				continue
+			var mmi = type_nodes[i]
+			if mmi and mmi.multimesh:
+				mmi.multimesh.instance_count = buf.size() / 20
+				mmi.multimesh.set_buffer(buf)
+		_pre_save_buffers.clear()
 
-func screen(base: Color, blend: Color) -> Color:
-	return Color.WHITE - (Color.WHITE - base) * (Color.WHITE - blend)
-
-func soft_light(base: Color, blend: Color) -> Color:
-	var limit = step(0.5, blend)
-	var base_squared = Color(sqrt(base.r), sqrt(base.g), sqrt(base.b), sqrt(base.a))
-	var base_x2 = base * 2.0
-	var blend_x2 = blend * 2.0
-	return lerp(base_x2 * blend + base * base * (Color.WHITE - blend_x2), base_squared * (blend_x2 - 1.0) + (base_x2) * (Color.WHITE - blend), limit)
 
 func _ready():
-	for i in range(4): # data.size():
-		# multimeshes.append(MultiMeshInstance3D.new())
-		#var mmi = MultiMeshInstance3D.new()
+	if type_nodes.size() < 4 or type_meshes.size() < 4:
+		push_error("GrassInstancer: type_nodes and type_meshes must each have 4 entries.")
+		return
+	for i in range(4):
 		var mm = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_colors = true
 		mm.use_custom_data = true
 		mm.mesh = type_meshes[i]
 		type_nodes[i].multimesh = mm
-		# mmi.multimesh = mm
-		#multimeshes.append(mmi)
 	var data = load_baked_instances(baked_file_path)
 	if data.size() == 0:
 		if Engine.is_editor_hint():
@@ -141,47 +225,25 @@ func _ready():
 	else:
 		print("loaded [%d %d %d %d] instances" % [data[0].size(), data[1].size(), data[2].size(), data[3].size()])
 
-	for i in range(4): # data.size():
+	for i in range(4):
 		var count = data[i].size()
 		type_nodes[i].multimesh.instance_count = count
-		# set transform and attributes for each MultiMeshInstance3D
 		for j in count:
 			var entry = data[i][j]
 			var basis = Basis(entry["basis_x"], entry["basis_y"], entry["basis_z"])
 			var xform = Transform3D(basis, entry["origin"])
-			var color = entry["color"]
-			var custom_data = entry["custom_data"]
 			type_nodes[i].multimesh.set_instance_transform(j, xform)
-			type_nodes[i].multimesh.set_instance_color(j, color)
-			type_nodes[i].multimesh.set_instance_custom_data(j, custom_data)
+			type_nodes[i].multimesh.set_instance_color(j, entry["color"])
+			type_nodes[i].multimesh.set_instance_custom_data(j, entry["custom_data"])
 
-		# set shader parameters for each instance type
-		var bounds = get_mesh_y_bounds(type_meshes[i])
-		var mat = type_nodes[i].multimesh.mesh.surface_get_material(0)
-		if mat and mat is ShaderMaterial:
-			mat.set_shader_parameter("min_height", bounds.x)
-			mat.set_shader_parameter("max_height", bounds.y) # * (blend_factor + 1.0))
-			mat.set_shader_parameter("blend_factor", blend_factor)
+		var cfg: GrassTypeConfig = type_configs[i] if i < type_configs.size() else null
+		_ensure_grass_material(type_nodes[i], type_meshes[i], cfg)
 
 
 func _process(_delta):
 	if Engine.is_editor_hint() and regenerate:
 		regenerate = false
 		_generate_instances()
-
-func get_average_color(img: Image, uv: Vector2, kernel: int = 2) -> Color:
-	var size = img.get_size()
-	var px = int(clamp(uv.x * size.x, 0, size.x - 1))
-	var py = int(clamp(uv.y * size.y, 0, size.y - 1))
-	var col = Color()
-	var count = 0
-	for dx in range(-kernel, kernel+1):
-		for dy in range(-kernel, kernel+1):
-			var sx = clamp(px + dx, 0, size.x - 1)
-			var sy = clamp(py + dy, 0, size.y - 1)
-			col += img.get_pixel(sx, sy)
-			count += 1
-	return col / float(count)
 
 func get_mesh_y_bounds(mesh: Mesh) -> Vector2:
 	var arr = mesh.surface_get_arrays(0)
@@ -206,10 +268,10 @@ func get_mesh_y_bounds(mesh: Mesh) -> Vector2:
 func get_vertex_color_from_custom0(custom0: PackedFloat32Array, vertex_index: int) -> Color:
 	var base = vertex_index * 4
 	return Color(
-		custom0[base + 0],			# R
-		1.0 - custom0[base + 1],	# G
-		custom0[base + 2],			# B
-		1.0 - custom0[base + 3]		# A
+		custom0[base + 0],
+		custom0[base + 1],
+		custom0[base + 2],
+		custom0[base + 3]
 	)
 
 func compute_triangle_rgba_weights(mesh: Mesh) -> Array[Color]:
@@ -239,38 +301,6 @@ func compute_triangle_rgba_weights(mesh: Mesh) -> Array[Color]:
 		weights[i] = w
 	return weights
 
-func _normalize_and_sharpen_rgba_weights(tri_weights: Array, power: float = 2.0) -> void:
-	# In-place normalize each channel to [0..1], then apply power curve to increase contrast.
-	if tri_weights.is_empty():
-		return
-	var min_r := 1e9; var max_r := -1e9
-	var min_g := 1e9; var max_g := -1e9
-	var min_b := 1e9; var max_b := -1e9
-	var min_a := 1e9; var max_a := -1e9
-
-	for w in tri_weights:
-		min_r = min(min_r, w.r); max_r = max(max_r, w.r)
-		min_g = min(min_g, w.g); max_g = max(max_g, w.g)
-		min_b = min(min_b, w.b); max_b = max(max_b, w.b)
-		min_a = min(min_a, w.a); max_a = max(max_a, w.a)
-
-	var dr := max(max_r - min_r, 0.0001)
-	var dg := max(max_g - min_g, 0.0001)
-	var db := max(max_b - min_b, 0.0001)
-	var da := max(max_a - min_a, 0.0001)
-
-	for i in tri_weights.size():
-		var w: Color = tri_weights[i]
-		w.r = pow(clamp((w.r - min_r)/dr, 0.0, 1.0), power)
-		w.r = lerp(lerp(1.0, w.r, vertex_color_influence), w.r, vertex_color_influence)
-		w.g = pow(clamp((w.g - min_g)/dg, 0.0, 1.0), power)
-		w.g = lerp(lerp(1.0, w.g, vertex_color_influence), w.g, vertex_color_influence)
-		w.b = pow(clamp((w.b - min_b)/db, 0.0, 1.0), power)
-		w.b = lerp(lerp(1.0, w.b, vertex_color_influence), w.b, vertex_color_influence)
-		w.a = pow(clamp((w.a - min_a)/da, 0.0, 1.0), power)
-		w.a = lerp(lerp(1.0, w.a, vertex_color_influence), w.a, vertex_color_influence)
-		tri_weights[i] = w
-
 func _sum_channel(tri_weights: Array, chan: int) -> float:
 	var s := 0.0
 	for w in tri_weights:
@@ -281,145 +311,77 @@ func _sum_channel(tri_weights: Array, chan: int) -> float:
 			3: s += w.a
 	return s
 
-func _pick_triangle_index_by_channel(tri_weights: Array, chan: int, rng: RandomNumberGenerator, total_weight: float) -> int:
-	# Weighted random pick among triangles for a single channel (R/G/B/A)
-	if total_weight <= 0.0:
-		return 0
-	var r := rng.randf() * total_weight
-	var accum := 0.0
-	for i in tri_weights.size():
-		var w: Color = tri_weights[i]
-		# var v := (chan == 0) ? w.r : (chan == 1) ? w.g : (chan == 2) ? w.b : w.a
-		# var v = w.r if chan == 0 else w.g if chan == 1 else w.b if chan == 2 else w.a
-		match chan:
-			0: accum += w.r
-			1: accum += w.g
-			2: accum += w.b
-			3: accum += w.a
-		if accum >= r:
-			return i
-	return tri_weights.size() - 1
-
-func place_instances_for_type(
-	terrain_mesh_instance: MeshInstance3D,
-	type_mesh: Mesh,
-	mm_node: MultiMeshInstance3D,
-	instance_count: int,
-	type_index_rgba: int, # 0=R,1=G,2=B,3=A
-	tri_weights: Array,
-	rng: RandomNumberGenerator
-) -> void:
-	var terrain_mesh = terrain_mesh_instance.mesh
-	var arr := terrain_mesh.surface_get_arrays(0)
-	var indices: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
-	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var vcolors: PackedColorArray = arr[Mesh.ARRAY_COLOR]
-	var tri_count := indices.size() / 3
-
-	var total := _sum_channel(tri_weights, type_index_rgba)
-	if total <= 0.0 or instance_count <= 0:
-		# Clear multimesh for this type
-		var empty := MultiMesh.new()
-		empty.transform_format = MultiMesh.TRANSFORM_3D
-		empty.use_colors = true
-		empty.mesh = type_mesh
-		empty.instance_count = 0
-		mm_node.multimesh = empty
-		print("skipping %s channel" % ["R", "G", "B", "A"][type_index_rgba])
-		return
-
+func _apply_placements(
+		ch: int, placements: Array,
+		mm_node: MultiMeshInstance3D, type_mesh: Mesh) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	mm.use_custom_data = true
 	mm.mesh = type_mesh
-	mm.instance_count = max(instance_count, 0)
-	var bounds = get_mesh_y_bounds(type_mesh)
-	print(type_index_rgba, " bounds: ", bounds)
-	var mat = type_mesh.surface_get_material(0)
-	if mat and mat is ShaderMaterial:
-		mat.set_shader_parameter("min_height", bounds.x)
-		mat.set_shader_parameter("max_height", bounds.y) # * blend_factor * 1.0)
-		mat.set_shader_parameter("blend_factor", blend_factor)
+	mm.instance_count = placements.size()
 
-	var start := Time.get_ticks_msec()
-	for i in instance_count:
-		var tri_idx := _pick_triangle_index_by_channel(tri_weights, type_index_rgba, rng, total)
-
-		var i0 := indices[tri_idx * 3 + 0]
-		var i1 := indices[tri_idx * 3 + 1]
-		var i2 := indices[tri_idx * 3 + 2]
-
-		# random barycentric
-		var a := rng.randf()
-		var b := rng.randf()
-		if a + b > 1.0:
-			a = 1.0 - a
-			b = 1.0 - b
-		var c := 1.0 - a - b
-
-		var local_pos := verts[i0] * a + verts[i1] * b + verts[i2] * c
-		var world_pos := terrain_mesh_instance.global_transform * local_pos
-		if i < 10:
-			print("instance position: [%0.3f, %0.3f, %0.3f]" % [local_pos.x, local_pos.y, local_pos.z])
-
-		# upright random Y rotation
-		var y_rot := rng.randf() * TAU
-		var xform := Transform3D(Basis(Vector3.UP, y_rot), world_pos)
-
+	var cfg_ap: GrassTypeConfig = type_configs[ch] if ch < type_configs.size() else null
+	_ensure_grass_material(mm_node, type_mesh, cfg_ap)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for i in placements.size():
+		var p: Dictionary = placements[i]
+		var y_rot  := rng.randf() * TAU
+		var xform  := Transform3D(Basis(Vector3.UP, y_rot), p.pos)
 		mm.set_instance_transform(i, xform)
-		# Per-instance color is whatever your shader expects (often white; the shader uses INSTANCE_COLOR for blending)
-		var color = screen(screen(vcolors[i0], vcolors[i1]), vcolors[i2])
-		mm.set_instance_color(i, color)
-		# Randomly scale instances
-		var scale = rng.randf_range(scale_min, scale_max)
-		# Store scale in custom data's X component (for example)
-		mm.set_instance_custom_data(i, Color(scale, 0, 0, 0))
+		mm.set_instance_color(i, p.color)
+		mm.set_instance_custom_data(i, Color(p.scale, 0.0, 0.0, 0.0))
 
 	mm_node.multimesh = mm
-	var elapsed := Time.get_ticks_msec() - start
-	print("generated %d instances on %s channel in %d ms" % [mm_node.multimesh.instance_count, ["R", "G", "B", "A"][type_index_rgba], elapsed])
+	print("placed %d instances on %s channel" % [placements.size(), ["R","G","B","A"][ch]])
+
 
 func scatter_four_types(
-	terrain_mesh_instance: MeshInstance3D,
-	# terrain_mesh: Mesh,
-	type_nodes: Array, # [MultiMeshInstance3D, MultiMeshInstance3D, MultiMeshInstance3D, MultiMeshInstance3D]
-	type_meshes: Array, # [Mesh, Mesh, Mesh, Mesh]
-	total_instances: int,
-	normalize_power := 2.0 # try 2..4 for stronger contrast
+	p_terrain_mmi: MeshInstance3D,
+	p_type_nodes: Array,
+	p_type_meshes: Array,
+	p_total_instances: int,
+	p_normalize_power := 2.0
 ) -> void:
-	print("scattering instances")
-	# 1) build triangle weights from custom0
-	var terrain_mesh: Mesh = terrain_mesh_instance.mesh
-	var tri_weights := compute_triangle_rgba_weights(terrain_mesh)
+	print("scattering instances (mode=%d)" % scatter_mode)
 
-	# 2) normalize + sharpen to expand your 0.3..0.45 range
-	_normalize_and_sharpen_rgba_weights(tri_weights, normalize_power)
+	# Proportional per-channel counts from raw density sums.
+	var tri_weights := compute_triangle_rgba_weights(p_terrain_mmi.mesh)
+	var sums := [
+		_sum_channel(tri_weights, 0),
+		_sum_channel(tri_weights, 1),
+		_sum_channel(tri_weights, 2),
+		_sum_channel(tri_weights, 3),
+	]
+	var total_sum := maxf(sums[0] + sums[1] + sums[2] + sums[3], 0.0001)
+	var counts := [
+		int(round(float(p_total_instances) * sums[0] / total_sum)),
+		int(round(float(p_total_instances) * sums[1] / total_sum)),
+		int(round(float(p_total_instances) * sums[2] / total_sum)),
+		0,
+	]
+	counts[3] = p_total_instances - counts[0] - counts[1] - counts[2]
 
-	# 3) split counts proportionally by channel sums
-	var sum_r := _sum_channel(tri_weights, 0)
-	var sum_g := _sum_channel(tri_weights, 1)
-	var sum_b := _sum_channel(tri_weights, 2)
-	var sum_a := _sum_channel(tri_weights, 3)
-	var total_sum := max(sum_r + sum_g + sum_b + sum_a, 0.0001)
-
-	var count_r := int(round(total_instances * (sum_r / total_sum)))
-	var count_g := int(round(total_instances * (sum_g / total_sum)))
-	var count_b := int(round(total_instances * (sum_b / total_sum)))
-	var count_a := total_instances - (count_r + count_g + count_b)
-
+	var scatter := GrassScatter.new()
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 
-	# 4) place each type into its own MultiMeshInstance3D
-	if type_meshes[0] and type_nodes[0]:
-		place_instances_for_type(terrain_mesh_instance, type_meshes[0], type_nodes[0], count_r, 0, tri_weights, rng)
-	if type_meshes[1] and type_nodes[1]:
-		place_instances_for_type(terrain_mesh_instance, type_meshes[1], type_nodes[1], count_g, 1, tri_weights, rng)
-	if type_meshes[2] and type_nodes[2]:
-		place_instances_for_type(terrain_mesh_instance, type_meshes[2], type_nodes[2], count_b, 2, tri_weights, rng)
-	if type_meshes[3] and type_nodes[3]:
-		place_instances_for_type(terrain_mesh_instance, type_meshes[3], type_nodes[3], count_a, 3, tri_weights, rng)
+	for ch in 4:
+		if not p_type_meshes[ch] or not p_type_nodes[ch]:
+			continue
+		var placements: Array
+		if scatter_mode == 1:
+			placements = scatter.scatter_poisson(
+				p_terrain_mmi, ch, min_spacing,
+				p_normalize_power, scale_min, scale_max, rng)
+			if placements.size() > counts[ch]:
+				placements.resize(counts[ch])
+		else:
+			placements = scatter.scatter_stratified(
+				p_terrain_mmi, ch, counts[ch],
+				p_normalize_power, scale_min, scale_max, rng)
+		_apply_placements(ch, placements, p_type_nodes[ch], p_type_meshes[ch])
 
 func _generate_instances():
 	if not Engine.is_editor_hint():
@@ -438,20 +400,11 @@ func _generate_instances():
 		return
 	print("generating instances...")
 
-	# -- Visibility fix --
 	var was_hidden := terrain_mesh_instance.visible == false
 	if was_hidden and Engine.is_editor_hint():
 		terrain_mesh_instance.visible = true
-		await get_tree().process_frame  # Ensure Godot updates visibility
+		await get_tree().process_frame
 
-	# var multi_nodes = [multimesh_instance0, multimesh_instance1, multimesh_instance2, multimesh_instance3]
-	# var meshes_per_type = [
-	# 	instance0_mesh, instance1_mesh, instance2_mesh, instance3_mesh
-	# ]
 	scatter_four_types(terrain_mesh_instance, type_nodes, type_meshes, total_instances, normalize_power)
-	# scatter_four_types(terrain_mesh_instance, multimeshes, type_meshes, total_instances, normalize_power)
-	#for type_idx in range(4):
-	#	distribute_instances_across_types(target_mesh.mesh, multi_nodes, meshes_per_type, instance_count, target_mesh.global_transform)
-	# -- Restore visibility if needed --
 	if was_hidden:
 		terrain_mesh_instance.visible = false

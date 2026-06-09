@@ -18,33 +18,9 @@ varying vec3 linear_instance_color;
 varying float v_blend;
 varying vec3 v_inst_lin;
 
-vec3 to_linear(vec3 c) {
-	return pow(c, vec3(2.2));
-}
-
-vec3 srgb_to_linear(vec3 color) {
-	return mix(
-		pow((color.rgb + vec3(0.055)) * (1.0 / (1.0 + 0.055)), vec3(2.4)),
-		color.rgb * (1.0 / 12.92),
-		lessThan(color.rgb, vec3(0.04045))
-	);
-}
-
-vec3 linear_to_srgb(vec3 color) {
-	// If going to srgb, clamp from 0 to 1.
-	color = clamp(color, vec3(0.0), vec3(1.0));
-	const vec3 a = vec3(0.055f);
-	return mix(
-		(vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a,
-		12.92f * color.rgb,
-		lessThan(color.rgb, vec3(0.0031308f))
-	);
-}
 
 void vertex() {
-	// instance_color = COLOR; // Per-instance color for MultiMesh
-	// linearize per-instance color once in the vertex stage
-	linear_instance_color = to_linear(COLOR.rgb);
+	linear_instance_color = COLOR.rgb;
 	// world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
 	// Read scale from CUSTOM_DATA.x
