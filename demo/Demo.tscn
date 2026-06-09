@@ -1,4 +1,4 @@
-[gd_scene format=4 uid="uid://cc0qumglfjia"]
+[gd_scene format=4 uid="uid://bujvpxohhkaos"]
 
 [ext_resource type="PackedScene" uid="uid://bpte1pkuv0c01" path="res://demo/example_terrain.gltf" id="1_jybf1"]
 [ext_resource type="Material" uid="uid://cjra5ip64w7sw" path="res://demo/example_terrain.tres" id="2_camd6"]
