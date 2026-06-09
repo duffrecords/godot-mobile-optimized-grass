@@ -15,10 +15,17 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Mobile Optimized Grass"
-run/main_scene="uid://wsvx5hunveud"
 config/features=PackedStringArray("4.6", "Mobile")
 boot_splash/image="uid://cpxidemhru7y5"
 config/icon="res://icon.svg"
+
+[autoload]
+
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/mobile_optimized_grass/plugin.cfg")
 
 [rendering]
 
