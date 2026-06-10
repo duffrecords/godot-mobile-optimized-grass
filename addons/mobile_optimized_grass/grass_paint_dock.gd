@@ -79,6 +79,8 @@ var _min_spacing_spin: SpinBox
 var _power_slider: HSlider
 var _no_selection_label: Label
 var _controls_root: Control
+var _scatter_progress_row: HBoxContainer
+var _scatter_progress_bar: ProgressBar
 
 
 func _ready() -> void:
@@ -131,6 +133,30 @@ func _build_ui() -> void:
 	_controls_root.add_child(_build_top_row())
 	_controls_root.add_child(HSeparator.new())
 	_controls_root.add_child(_build_bottom_row())
+	_controls_root.add_child(_build_progress_row())
+
+
+func _build_progress_row() -> HBoxContainer:
+	_scatter_progress_row = HBoxContainer.new()
+	_scatter_progress_row.visible = false
+	_scatter_progress_row.add_theme_constant_override("separation", 6)
+	var lbl := Label.new()
+	lbl.text = "Scattering…"
+	_scatter_progress_row.add_child(lbl)
+	_scatter_progress_bar = ProgressBar.new()
+	_scatter_progress_bar.min_value = 0.0
+	_scatter_progress_bar.max_value = 100.0
+	_scatter_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scatter_progress_row.add_child(_scatter_progress_bar)
+	return _scatter_progress_row
+
+
+func update_scatter_progress(step: int, total: int) -> void:
+	if step >= total:
+		_scatter_progress_row.visible = false
+		return
+	_scatter_progress_bar.value = float(step) / float(maxi(total, 1)) * 100.0
+	_scatter_progress_row.visible = true
 
 
 func _build_top_row() -> HBoxContainer:

@@ -34,6 +34,11 @@ extends Node3D
 @export_range(0.0, 1.0) var vertex_color_influence: float = 1.0
 ## Check to immediately re-scatter instances in the editor.
 @export var regenerate := false
+## Progress callback set by the plugin dock before triggering scatter; cleared after use.
+var scatter_progress_cb: Callable
+var _scatter_pending_cb: Callable
+var _scatter_next_frame := false
+var _scatter_in_progress := false
 ## Path to the binary file used for baking and loading instances at runtime.
 @export var baked_file_path: String = "res://grass_instances.bin"
 
@@ -241,9 +246,90 @@ func _ready():
 
 
 func _process(_delta):
-	if Engine.is_editor_hint() and regenerate:
+	if not Engine.is_editor_hint():
+		return
+	if regenerate:
+		if _scatter_in_progress:
+			regenerate = false  # discard: scatter already running
+			return
+		# Frame 1: show the bar, then let the engine render before starting scatter.
 		regenerate = false
-		_generate_instances()
+		_scatter_pending_cb = scatter_progress_cb
+		scatter_progress_cb = Callable()
+		if _scatter_pending_cb.is_valid():
+			_scatter_pending_cb.call(0, 100)
+		_scatter_next_frame = true
+	elif _scatter_next_frame:
+		# Frame 2: engine has rendered the bar — launch the async scatter coroutine.
+		_scatter_next_frame = false
+		_scatter_async(_scatter_pending_cb)
+
+func _scatter_async(p_progress_cb: Callable) -> void:
+	_scatter_in_progress = true
+	if not terrain_mesh_instance or not terrain_mesh_instance.mesh:
+		_scatter_in_progress = false
+		return
+
+	var was_hidden := not terrain_mesh_instance.visible
+	if was_hidden:
+		terrain_mesh_instance.visible = true
+
+	print("scattering instances async (mode=%d)" % scatter_mode)
+
+	var tri_weights := compute_triangle_rgba_weights(terrain_mesh_instance.mesh)
+	var sums := [
+		_sum_channel(tri_weights, 0), _sum_channel(tri_weights, 1),
+		_sum_channel(tri_weights, 2), _sum_channel(tri_weights, 3),
+	]
+	var total_sum := maxf(sums[0] + sums[1] + sums[2] + sums[3], 0.0001)
+	var counts := [
+		int(round(float(total_instances) * sums[0] / total_sum)),
+		int(round(float(total_instances) * sums[1] / total_sum)),
+		int(round(float(total_instances) * sums[2] / total_sum)),
+		0,
+	]
+	counts[3] = total_instances - counts[0] - counts[1] - counts[2]
+
+	var scatter_obj := GrassScatter.new()
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
+	for ch in 4:
+		if not type_meshes[ch] or not type_nodes[ch]:
+			continue
+
+		# Update bar and yield so the engine renders that state before the scatter freeze.
+		if p_progress_cb.is_valid():
+			p_progress_cb.call(ch * 25, 100)
+		await get_tree().process_frame
+
+		var per_ch_cb := Callable()
+		if p_progress_cb.is_valid():
+			var ch_offset := ch * 25
+			per_ch_cb = func(current: int, total: int) -> void:
+				p_progress_cb.call(
+					ch_offset + int(float(current) / float(maxi(total, 1)) * 25), 100)
+
+		var placements: Array
+		if scatter_mode == 1:
+			placements = scatter_obj.scatter_poisson(
+				terrain_mesh_instance, ch, min_spacing,
+				normalize_power, scale_min, scale_max, rng, per_ch_cb)
+			if placements.size() > counts[ch]:
+				placements.resize(counts[ch])
+		else:
+			placements = scatter_obj.scatter_stratified(
+				terrain_mesh_instance, ch, counts[ch],
+				normalize_power, scale_min, scale_max, rng, per_ch_cb)
+		_apply_placements(ch, placements, type_nodes[ch], type_meshes[ch])
+
+	if was_hidden:
+		terrain_mesh_instance.visible = false
+	if p_progress_cb.is_valid():
+		p_progress_cb.call(100, 100)
+	_scatter_pending_cb = Callable()
+	_scatter_in_progress = false
+
 
 func get_mesh_y_bounds(mesh: Mesh) -> Vector2:
 	var arr = mesh.surface_get_arrays(0)
@@ -342,7 +428,8 @@ func scatter_four_types(
 	p_type_nodes: Array,
 	p_type_meshes: Array,
 	p_total_instances: int,
-	p_normalize_power := 2.0
+	p_normalize_power := 2.0,
+	p_global_progress_cb: Callable = Callable()
 ) -> void:
 	print("scattering instances (mode=%d)" % scatter_mode)
 
@@ -370,25 +457,31 @@ func scatter_four_types(
 	for ch in 4:
 		if not p_type_meshes[ch] or not p_type_nodes[ch]:
 			continue
+
+		# Map this channel's local (current, total) onto its 25-step slice of the global bar.
+		var progress_cb := Callable()
+		if p_global_progress_cb.is_valid():
+			var ch_offset := ch * 25
+			progress_cb = func(current: int, total: int) -> void:
+				p_global_progress_cb.call(
+					ch_offset + int(float(current) / float(maxi(total, 1)) * 25), 100)
+
 		var placements: Array
 		if scatter_mode == 1:
 			placements = scatter.scatter_poisson(
 				p_terrain_mmi, ch, min_spacing,
-				p_normalize_power, scale_min, scale_max, rng)
+				p_normalize_power, scale_min, scale_max, rng, progress_cb)
 			if placements.size() > counts[ch]:
 				placements.resize(counts[ch])
 		else:
 			placements = scatter.scatter_stratified(
 				p_terrain_mmi, ch, counts[ch],
-				p_normalize_power, scale_min, scale_max, rng)
+				p_normalize_power, scale_min, scale_max, rng, progress_cb)
 		_apply_placements(ch, placements, p_type_nodes[ch], p_type_meshes[ch])
 
-func _generate_instances():
+func _generate_instances(global_progress_cb: Callable = Callable()) -> void:
 	if not Engine.is_editor_hint():
 		return
-	#if not grass_instance_mesh:
-	#	print("A valid instance mesh is required.")
-	#	return
 	if not terrain_mesh_instance:
 		print("A valid target mesh is required.")
 		return
@@ -401,10 +494,12 @@ func _generate_instances():
 	print("generating instances...")
 
 	var was_hidden := terrain_mesh_instance.visible == false
-	if was_hidden and Engine.is_editor_hint():
+	if was_hidden:
 		terrain_mesh_instance.visible = true
 		await get_tree().process_frame
 
-	scatter_four_types(terrain_mesh_instance, type_nodes, type_meshes, total_instances, normalize_power)
+	scatter_four_types(terrain_mesh_instance, type_nodes, type_meshes, total_instances, normalize_power, global_progress_cb)
 	if was_hidden:
 		terrain_mesh_instance.visible = false
+	if global_progress_cb.is_valid():
+		global_progress_cb.call(100, 100)

@@ -4,6 +4,8 @@ extends RefCounted
 
 # Maximum candidate attempts per active point in Bridson's Poisson disk algorithm.
 const MAX_ATTEMPTS := 30
+# How many spatial points are placed between progress callbacks in Poisson mode.
+const PROGRESS_INTERVAL := 500
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -14,7 +16,8 @@ const MAX_ATTEMPTS := 30
 func scatter_stratified(
 		mmi: MeshInstance3D, channel: int, count: int,
 		power: float, scale_min: float, scale_max: float,
-		rng: RandomNumberGenerator) -> Array:
+		rng: RandomNumberGenerator,
+		progress_cb: Callable = Callable()) -> Array:
 	var md := _load_mesh_data(mmi)
 	if md.is_empty() or count <= 0:
 		return []
@@ -30,6 +33,8 @@ func scatter_stratified(
 
 	var results: Array = []
 	for row in rows:
+		if progress_cb.is_valid():
+			progress_cb.call(row, rows)
 		for col in cols:
 			var px: float = md.xz_min.x + (float(col) + rng.randf()) * cell_sz
 			var pz: float = md.xz_min.y + (float(row) + rng.randf()) * cell_sz
@@ -56,7 +61,8 @@ func scatter_stratified(
 func scatter_poisson(
 		mmi: MeshInstance3D, channel: int, min_spacing: float,
 		power: float, scale_min: float, scale_max: float,
-		rng: RandomNumberGenerator) -> Array:
+		rng: RandomNumberGenerator,
+		progress_cb: Callable = Callable()) -> Array:
 	var md := _load_mesh_data(mmi)
 	if md.is_empty() or min_spacing <= 0.0:
 		return []
@@ -67,6 +73,8 @@ func scatter_poisson(
 
 	# Background grid cell size for O(1) neighbor checks.
 	var cell_sz := min_spacing / sqrt(2.0)
+	# Upper bound on placeable points: one per background grid cell.
+	var estimated_max := maxi(1, ceili(xz_sz.x / cell_sz) * ceili(xz_sz.y / cell_sz))
 
 	# grid maps Vector2i cell → index into spatial_pts
 	var grid         := {}
@@ -95,6 +103,9 @@ func scatter_poisson(
 				var local_pos := _interp_pos(md.verts, md.idx, sh.tri_i, sh.bary)
 				var color     := _interp_color(md.colors, md.idx, sh.tri_i, sh.bary)
 				results.append(_make_placement(local_pos, mmi.global_transform, color, scale_min, scale_max, rng))
+
+	if progress_cb.is_valid():
+		progress_cb.call(0, estimated_max)
 
 	while not active.is_empty():
 		var pick_i := rng.randi() % active.size()
@@ -132,6 +143,9 @@ func scatter_poisson(
 			active.append(new_i)
 			grid[_cell_key(cand, md.xz_min, cell_sz)] = new_i
 			placed_child = true
+
+			if progress_cb.is_valid() and spatial_pts.size() % PROGRESS_INTERVAL == 0:
+				progress_cb.call(spatial_pts.size(), estimated_max)
 
 			var local_pos := _interp_pos(md.verts, md.idx, hit.tri_i, hit.bary)
 			var color     := _interp_color(md.colors, md.idx, hit.tri_i, hit.bary)

@@ -109,8 +109,12 @@ func _on_preview_toggled(enabled: bool, composite: bool) -> void:
 
 
 func _on_regenerate_requested() -> void:
-	if is_instance_valid(_target) and "regenerate" in _target:
-		_target.set("regenerate", true)
+	if not is_instance_valid(_target):
+		return
+	var global_cb := func(step: int, total: int) -> void:
+		_dock.update_scatter_progress(step, total)
+	_target.set("scatter_progress_cb", global_cb)
+	_target.set("regenerate", true)
 
 
 func _on_bake_requested() -> void:
