@@ -9,6 +9,11 @@ uniform float min_height = 0.0;
 uniform float max_height = 1.0;
 uniform float blend_factor : hint_range(0.0, 1.0) = 0.5;
 
+uniform float wind_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float wind_speed = 1.0;
+uniform float wind_scale = 1.0;
+uniform vec2 wind_direction = vec2(1.0, 0.0);
+
 //varying vec4 instance_color;
 //varying vec3 world_pos;
 // Pass blend factor from vertex to fragment
@@ -36,6 +41,26 @@ void vertex() {
 
 	// Apply uniform scale to instance transform's basis
 	VERTEX *= scale;
+
+	// Wind sway — vertex-only, base stays planted via v_blend² weight.
+	// Uses the instance origin (MODEL_MATRIX column 3) for a consistent per-blade phase.
+	float dir_len = length(wind_direction);
+	if (wind_strength > 0.0 && dir_len > 1e-5) {
+		vec2 dir = wind_direction / dir_len;
+		vec3 origin = MODEL_MATRIX[3].xyz;
+		float phase = dot(origin.xz, dir) * wind_scale + TIME * wind_speed;
+		float sway = sin(phase) + sin(phase * 2.3 + 1.7) * 0.3;
+		float weight = v_blend * v_blend;
+		vec3 world_offset = vec3(dir.x, 0.0, dir.y) * (sway * wind_strength * weight);
+		// Instances are randomly rotated about Y, so map the world-space offset into
+		// local space. The basis is rotation * scale (no shear), so its inverse is the
+		// transpose with each row divided by that axis's squared length.
+		mat3 basis = mat3(MODEL_MATRIX);
+		VERTEX += vec3(
+			dot(basis[0], world_offset) / dot(basis[0], basis[0]),
+			dot(basis[1], world_offset) / dot(basis[1], basis[1]),
+			dot(basis[2], world_offset) / dot(basis[2], basis[2]));
+	}
 
 }
 

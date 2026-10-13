@@ -14,3 +14,10 @@ extends Resource
 @export var override_height_bounds: bool = false
 @export var min_height: float = 0.0
 @export var max_height: float = 1.0
+
+@export_group("Wind")
+@export var override_wind: bool = false
+@export_range(0.0, 1.0) var wind_strength: float = 0.0
+@export var wind_speed: float = 1.0
+@export var wind_scale: float = 1.0
+@export var wind_direction: Vector2 = Vector2(1.0, 0.0)
