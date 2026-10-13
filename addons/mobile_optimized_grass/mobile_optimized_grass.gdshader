@@ -44,13 +44,22 @@ void vertex() {
 
 	// Wind sway — vertex-only, base stays planted via v_blend² weight.
 	// Uses the instance origin (MODEL_MATRIX column 3) for a consistent per-blade phase.
-	if (wind_strength > 0.0) {
+	float dir_len = length(wind_direction);
+	if (wind_strength > 0.0 && dir_len > 1e-5) {
+		vec2 dir = wind_direction / dir_len;
 		vec3 origin = MODEL_MATRIX[3].xyz;
-		float phase = dot(origin.xz, wind_direction) * wind_scale + TIME * wind_speed;
+		float phase = dot(origin.xz, dir) * wind_scale + TIME * wind_speed;
 		float sway = sin(phase) + sin(phase * 2.3 + 1.7) * 0.3;
 		float weight = v_blend * v_blend;
-		VERTEX.x += wind_direction.x * sway * wind_strength * weight;
-		VERTEX.z += wind_direction.y * sway * wind_strength * weight;
+		vec3 world_offset = vec3(dir.x, 0.0, dir.y) * (sway * wind_strength * weight);
+		// Instances are randomly rotated about Y, so map the world-space offset into
+		// local space. The basis is rotation * scale (no shear), so its inverse is the
+		// transpose with each row divided by that axis's squared length.
+		mat3 basis = mat3(MODEL_MATRIX);
+		VERTEX += vec3(
+			dot(basis[0], world_offset) / dot(basis[0], basis[0]),
+			dot(basis[1], world_offset) / dot(basis[1], basis[1]),
+			dot(basis[2], world_offset) / dot(basis[2], basis[2]));
 	}
 
 }

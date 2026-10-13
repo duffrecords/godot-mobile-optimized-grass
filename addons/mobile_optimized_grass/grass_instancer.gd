@@ -38,7 +38,7 @@ extends Node3D
 	set(value):
 		wind_strength = value
 		_refresh_wind()
-## Frequency of the wind oscillation in cycles per second.
+## Angular speed of the wind oscillation in radians per second (1.0 ≈ one sway every 6.3 s).
 @export var wind_speed: float = 1.0:
 	set(value):
 		wind_speed = value
