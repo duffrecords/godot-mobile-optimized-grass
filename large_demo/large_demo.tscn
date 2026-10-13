@@ -197,6 +197,10 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = -5.9604645e-08
 shader_parameter/max_height = 0.51624095
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.2
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 0.2
+shader_parameter/wind_direction = Vector2(1, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_v3o84"]
 transform_format = 1
@@ -213,6 +217,10 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = -0.00011422227
 shader_parameter/max_height = 0.41485736
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.2
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 0.2
+shader_parameter/wind_direction = Vector2(1, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_ctjnd"]
 transform_format = 1
@@ -229,6 +237,10 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = 0.00020370705
 shader_parameter/max_height = 0.43654415
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.2
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 0.2
+shader_parameter/wind_direction = Vector2(1, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_oxpgl"]
 transform_format = 1
@@ -245,6 +257,10 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = -0.0011458326
 shader_parameter/max_height = 0.20930272
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.2
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 0.2
+shader_parameter/wind_direction = Vector2(1, 0)
 
 [sub_resource type="MultiMesh" id="MultiMesh_853mk"]
 transform_format = 1
@@ -279,6 +295,8 @@ scale_max = 3.0
 scatter_mode = 1
 min_spacing = 0.21000000000000002
 blend_factor = 0.6
+wind_strength = 0.2
+wind_scale = 0.2
 baked_file_path = "res://large_demo/grass_instances.bin"
 
 [node name="GrassType0" type="MultiMeshInstance3D" parent="MobileOptimizedGrass" unique_id=1898586277]

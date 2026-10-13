@@ -231,8 +231,12 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = 0.0
 shader_parameter/max_height = 0.422
 shader_parameter/blend_factor = 0.5
+shader_parameter/wind_strength = 0.05
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 1.0
+shader_parameter/wind_direction = Vector2(1, 0)
 
-[sub_resource type="MultiMesh" id="MultiMesh_camd6"]
+[sub_resource type="MultiMesh" id="MultiMesh_xm42s"]
 transform_format = 1
 use_colors = true
 use_custom_data = true
@@ -247,8 +251,12 @@ shader_parameter/alpha_antialiasing_edge = 0.5
 shader_parameter/min_height = -0.001
 shader_parameter/max_height = 0.276
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.05
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 1.0
+shader_parameter/wind_direction = Vector2(1, 0)
 
-[sub_resource type="MultiMesh" id="MultiMesh_sovnx"]
+[sub_resource type="MultiMesh" id="MultiMesh_tdg64"]
 transform_format = 1
 use_colors = true
 use_custom_data = true
@@ -263,8 +271,12 @@ shader_parameter/alpha_antialiasing_edge = 0.4
 shader_parameter/min_height = 0.0
 shader_parameter/max_height = 0.415
 shader_parameter/blend_factor = 0.5
+shader_parameter/wind_strength = 0.05
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 1.0
+shader_parameter/wind_direction = Vector2(1, 0)
 
-[sub_resource type="MultiMesh" id="MultiMesh_dacvs"]
+[sub_resource type="MultiMesh" id="MultiMesh_nk31j"]
 transform_format = 1
 use_colors = true
 use_custom_data = true
@@ -279,8 +291,12 @@ shader_parameter/alpha_antialiasing_edge = 0.15
 shader_parameter/min_height = 0.0
 shader_parameter/max_height = 0.437
 shader_parameter/blend_factor = 0.6
+shader_parameter/wind_strength = 0.05
+shader_parameter/wind_speed = 1.0
+shader_parameter/wind_scale = 1.0
+shader_parameter/wind_direction = Vector2(1, 0)
 
-[sub_resource type="MultiMesh" id="MultiMesh_ku17f"]
+[sub_resource type="MultiMesh" id="MultiMesh_fy1p0"]
 transform_format = 1
 use_colors = true
 use_custom_data = true
@@ -305,8 +321,9 @@ total_instances = 5001
 normalize_power = 2.5
 scale_max = 1.25
 scatter_mode = 1
-min_spacing = 0.1
+min_spacing = 0.11
 blend_factor = 0.6
+wind_strength = 0.05
 baked_file_path = "res://demo/grass_instances.bin"
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=751619198]
@@ -317,18 +334,18 @@ environment = SubResource("Environment_rbuen")
 
 [node name="GrassInstances" type="MultiMeshInstance3D" parent="." unique_id=591895176]
 material_override = SubResource("ShaderMaterial_dacvs")
-multimesh = SubResource("MultiMesh_camd6")
+multimesh = SubResource("MultiMesh_xm42s")
 
 [node name="DandelionInstances" type="MultiMeshInstance3D" parent="." unique_id=1419724065]
 material_override = SubResource("ShaderMaterial_tbesn")
-multimesh = SubResource("MultiMesh_sovnx")
+multimesh = SubResource("MultiMesh_tdg64")
 
 [node name="WeedInstances" type="MultiMeshInstance3D" parent="." unique_id=515986738]
 material_override = SubResource("ShaderMaterial_v2422")
-multimesh = SubResource("MultiMesh_dacvs")
+multimesh = SubResource("MultiMesh_nk31j")
 
 [node name="WildflowerInstances" type="MultiMeshInstance3D" parent="." unique_id=625568433]
 material_override = SubResource("ShaderMaterial_vb14r")
-multimesh = SubResource("MultiMesh_ku17f")
+multimesh = SubResource("MultiMesh_fy1p0")
 
 [editable path="example_terrain"]
