@@ -9,6 +9,11 @@ uniform float min_height = 0.0;
 uniform float max_height = 1.0;
 uniform float blend_factor : hint_range(0.0, 1.0) = 0.5;
 
+uniform float wind_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float wind_speed = 1.0;
+uniform float wind_scale = 1.0;
+uniform vec2 wind_direction = vec2(1.0, 0.0);
+
 //varying vec4 instance_color;
 //varying vec3 world_pos;
 // Pass blend factor from vertex to fragment
@@ -36,6 +41,17 @@ void vertex() {
 
 	// Apply uniform scale to instance transform's basis
 	VERTEX *= scale;
+
+	// Wind sway — vertex-only, base stays planted via v_blend² weight.
+	// Uses the instance origin (MODEL_MATRIX column 3) for a consistent per-blade phase.
+	if (wind_strength > 0.0) {
+		vec3 origin = MODEL_MATRIX[3].xyz;
+		float phase = dot(origin.xz, wind_direction) * wind_scale + TIME * wind_speed;
+		float sway = sin(phase) + sin(phase * 2.3 + 1.7) * 0.3;
+		float weight = v_blend * v_blend;
+		VERTEX.x += wind_direction.x * sway * wind_strength * weight;
+		VERTEX.z += wind_direction.y * sway * wind_strength * weight;
+	}
 
 }
 

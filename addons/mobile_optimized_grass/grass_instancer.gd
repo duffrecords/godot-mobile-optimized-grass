@@ -32,6 +32,28 @@ extends Node3D
 @export_range(0.0, 1.0) var blend_factor: float = 0.5
 ## How strongly vertex density channels bias instance placement (0 = uniform random, 1 = density-only).
 @export_range(0.0, 1.0) var vertex_color_influence: float = 1.0
+@export_group("Wind")
+## Global wind displacement strength. 0.0 (default) produces output identical to the original shader.
+@export_range(0.0, 1.0) var wind_strength: float = 0.0:
+	set(value):
+		wind_strength = value
+		_refresh_wind()
+## Frequency of the wind oscillation in cycles per second.
+@export var wind_speed: float = 1.0:
+	set(value):
+		wind_speed = value
+		_refresh_wind()
+## Spatial frequency of the wind wave — higher values create shorter wavelengths across the field.
+@export var wind_scale: float = 1.0:
+	set(value):
+		wind_scale = value
+		_refresh_wind()
+## XZ direction the wind blows (does not need to be normalized).
+@export var wind_direction: Vector2 = Vector2(1.0, 0.0):
+	set(value):
+		wind_direction = value
+		_refresh_wind()
+@export_group("")
 ## Check to immediately re-scatter instances in the editor.
 @export var regenerate := false
 ## Progress callback set by the plugin dock before triggering scatter; cleared after use.
@@ -58,6 +80,31 @@ func _extract_albedo_texture(mat: Material) -> Texture2D:
 	return null
 
 
+func _apply_wind_to_material(sm: ShaderMaterial, config: GrassTypeConfig) -> void:
+	var w_strength := config.wind_strength if (config and config.override_wind) else wind_strength
+	var w_speed    := config.wind_speed    if (config and config.override_wind) else wind_speed
+	var w_scale    := config.wind_scale    if (config and config.override_wind) else wind_scale
+	var w_dir      := config.wind_direction if (config and config.override_wind) else wind_direction
+	sm.set_shader_parameter("wind_strength", w_strength)
+	sm.set_shader_parameter("wind_speed", w_speed)
+	sm.set_shader_parameter("wind_scale", w_scale)
+	sm.set_shader_parameter("wind_direction", w_dir)
+
+
+func _refresh_wind() -> void:
+	for i in mini(type_nodes.size(), 4):
+		if not type_nodes[i]:
+			continue
+		var mat: Material = type_nodes[i].material_override
+		if not (mat is ShaderMaterial):
+			continue
+		var sm := mat as ShaderMaterial
+		if not sm.shader or sm.shader.resource_path != _GRASS_SHADER_PATH:
+			continue
+		var cfg: GrassTypeConfig = type_configs[i] if i < type_configs.size() else null
+		_apply_wind_to_material(sm, cfg)
+
+
 func _ensure_grass_material(mmi: MultiMeshInstance3D, mesh: Mesh, config: GrassTypeConfig = null) -> void:
 	var bounds: Vector2
 	if config and config.override_height_bounds:
@@ -77,6 +124,7 @@ func _ensure_grass_material(mmi: MultiMeshInstance3D, mesh: Mesh, config: GrassT
 			sm.set_shader_parameter("blend_factor", bf)
 			sm.set_shader_parameter("alpha_scissor_threshold", threshold)
 			sm.set_shader_parameter("alpha_antialiasing_edge", aa_edge)
+			_apply_wind_to_material(sm, config)
 			return
 	var albedo_tex := _extract_albedo_texture(mesh.surface_get_material(0))
 	var shader := load(_GRASS_SHADER_PATH) as Shader
@@ -89,6 +137,7 @@ func _ensure_grass_material(mmi: MultiMeshInstance3D, mesh: Mesh, config: GrassT
 	mat.set_shader_parameter("min_height", bounds.x)
 	mat.set_shader_parameter("max_height", bounds.y)
 	mat.set_shader_parameter("blend_factor", bf)
+	_apply_wind_to_material(mat, config)
 	mmi.material_override = mat
 
 
